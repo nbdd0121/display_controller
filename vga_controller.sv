@@ -36,7 +36,7 @@ reg hsync_delay, vsync_delay;
 reg en_delayed;
 
 // Logic to update h and v counters
-always @(posedge clk or posedge rst)
+always_ff @(posedge clk or posedge rst)
 begin
     if (rst)
         begin
@@ -62,7 +62,7 @@ end
 
 // This delays the generation of hsync and vsync signals by one clock cycle
 // since we need one clock cycle to get the RGB data
-always @(posedge clk)
+always_ff @(posedge clk)
 begin
     hsync <= hsync_delay;
     if (h_counter >= H_FRAME_WIDTH + H_FRONT_PORCH && h_counter < H_FRAME_WIDTH + H_FRONT_PORCH + H_SYNC_PULSE)
@@ -71,7 +71,7 @@ begin
         hsync_delay <= !H_SYNC_ACTIVE;
 end
 
-always @(posedge clk)
+always_ff @(posedge clk)
 begin
     vsync <= vsync_delay;
     if (v_counter >= V_FRAME_WIDTH + V_FRONT_PORCH && v_counter < V_FRAME_WIDTH + V_FRONT_PORCH + V_SYNC_PULSE)
@@ -80,7 +80,7 @@ begin
         vsync_delay <= !V_SYNC_ACTIVE;
 end
 
-always @(posedge clk) begin
+always_ff @(posedge clk) begin
     en_delayed <= en;
 end
 
