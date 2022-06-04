@@ -2,7 +2,7 @@ module video_unit (
    /*  VGA IOs */
    input  clk,
    // Reset, active high
-   input  rst,
+   input  rst_ni,
    output [7:0] red,
    output [7:0] green,
    output [7:0] blue,
@@ -115,8 +115,8 @@ nasti_lite_bram_ctrl # (
    .bram_rddata     (mem_read)
 );
 
-always_ff @(posedge mem_clk or posedge rst)
-   if (rst) begin
+always_ff @(posedge mem_clk or negedge rst_ni)
+   if (!rst_ni) begin
       cr_base_delay  <= 15'd0;
       cr_depth       <= 2'd0;
       cr_enable      <= 1'd0;
@@ -189,8 +189,8 @@ always_ff @(posedge mem_clk or posedge rst)
    end
 
 // Delay write to cr_base until next vsync to avoid tearing
-always_ff @(posedge pxl_clk or posedge rst)
-   if (rst) begin
+always_ff @(posedge pxl_clk or negedge rst_ni)
+   if (!rst_ni) begin
       cr_base      <= 15'd0;
       cr_bg_color  <= 24'hFFFFFF;
    end
@@ -286,14 +286,14 @@ assign buffer_ch.r_ready = 0;
 /* Clock freq choosing */
 clk_en_gen clk_gen (
    .clk  (pxl_clk),
-   .rst  (rst),
+   .rst_ni (rst_ni),
    .freq (cr_pxlfreq),
    .en   (pxl_clk_en)
 );
 
 clk_wiz_vga clk_conv(
     .clk_in1  (clk),
-    .reset    (rst),
+    .resetn   (rst_ni),
     .clk_out1 (pxl_clk)
 );
 
@@ -310,26 +310,28 @@ logic [15:0] h_counter;
 logic [15:0] v_counter;
 
 // Logic to update h and v counters
-always_ff @(posedge pxl_clk or posedge rst) begin
-   if (rst | !cr_enable) begin
+always_ff @(posedge pxl_clk or negedge rst_ni) begin
+  if (!rstn) begin
+    h_counter <= 0;
+    v_counter <= 0;
+  end else begin
+    if (!cr_enable) begin
       // If monitor is turned off, reset counters
       h_counter <= 0;
       v_counter <= 0;
-   end
-    else if (pxl_clk_en) begin
+    end else if (pxl_clk_en) begin
       if (h_counter == cr_h_total - 1) begin
-            h_counter <= 0;
-            if (v_counter == cr_v_total - 1) begin
-               v_counter <= 0;
-            end
-            else begin
-               v_counter <= v_counter + 1;
-            end
+        h_counter <= 0;
+        if (v_counter == cr_v_total - 1) begin
+          v_counter <= 0;
+        end else begin
+          v_counter <= v_counter + 1;
+        end
+      end else begin
+        h_counter <= h_counter + 1;
       end
-      else begin
-         h_counter <= h_counter + 1;
-      end
-   end
+    end
+  end
 end
 
 // Second stage
@@ -386,8 +388,8 @@ always_comb begin
    endcase
 end
 
-always_ff @(posedge pxl_clk or posedge rst) begin
-   if (rst) begin
+always_ff @(posedge pxl_clk or negedge rst_ni) begin
+   if (!rst_ni) begin
       dma_en_delay <= 0;
       dma_src_addr_delay <= 0;
    end

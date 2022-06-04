@@ -4,7 +4,7 @@ module clk_en_gen #(
    parameter WIDTH = 8
 ) (
    input  wire clk,
-   input  wire rst,
+   input  wire rst_ni,
    input  wire [INPUT_WIDTH - 1:0] freq,
    output reg  en
 );
@@ -13,8 +13,8 @@ logic [WIDTH - 1:0] counter, counter_nxt;
 
 assign counter_nxt = counter + freq;
 
-always_ff @(posedge clk or posedge rst) begin
-   if (rst) begin
+always_ff @(posedge clk or negedge rst_ni) begin
+   if (!rst_ni) begin
       counter <= 0;
       en <= 1;
    end
