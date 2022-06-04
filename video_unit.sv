@@ -42,7 +42,7 @@ logic [7:0]  pxl_offset_delayed;
 logic [63:0] cr_base;
 logic [63:0] cr_base_delay;
 
-logic [1:0]  cr_depth;
+logic cr_depth;
 
 logic cr_enable;
 logic [7:0] cr_pxlfreq;
@@ -122,7 +122,7 @@ nasti_lite_bram_ctrl # (
 always_ff @(posedge mem_clk or negedge rst_ni)
    if (!rst_ni) begin
       cr_base_delay  <= 15'd0;
-      cr_depth       <= 2'd0;
+      cr_depth       <= 1'd0;
       cr_enable      <= 1'd0;
       cr_pxlfreq     <= 8'd25;
       cr_hsync_pol   <= 1'd1;
@@ -145,7 +145,7 @@ always_ff @(posedge mem_clk or negedge rst_ni)
       case (mem_addr[11:2])
          CR_BASE      : mem_read <= cr_base[31:0];
          CR_BASE_HIGH : mem_read <= cr_base[63:32];
-         CR_DEPTH     : mem_read <= {30'd0, cr_depth};
+         CR_DEPTH     : mem_read <= {31'd0, cr_depth};
          CR_ENABLE    : mem_read <= {31'd0, cr_enable};
          CR_POLARITY  : mem_read <= {30'd0, cr_vsync_pol, cr_hsync_pol};
          CR_PXLFREQ   : mem_read <= {24'd0, cr_pxlfreq};
@@ -169,7 +169,7 @@ always_ff @(posedge mem_clk or negedge rst_ni)
          case (mem_addr[11:2])
             CR_BASE      : cr_base_delay[31:0] <= mem_write;
             CR_BASE_HIGH : cr_base_delay[63:32] <= mem_write;
-            CR_DEPTH     : if (!cr_enable) cr_depth      <= mem_write[1:0];
+            CR_DEPTH     : if (!cr_enable) cr_depth      <= mem_write[0];
             CR_ENABLE    : cr_enable <= mem_write[0];
             CR_POLARITY  :
                if (!cr_enable) begin
@@ -370,10 +370,8 @@ logic [14:0] fb_width_in_bytes;
 
 always_comb begin
    case (cr_depth)
-      2'b00: fb_width_in_bytes = cr_fb_width * 4;
-      2'b01: fb_width_in_bytes = cr_fb_width * 2;
-      2'b10: fb_width_in_bytes = cr_fb_width;
-      2'b11: fb_width_in_bytes = cr_fb_width / 2;
+      1'b0: fb_width_in_bytes = cr_fb_width * 4;
+      1'b1: fb_width_in_bytes = cr_fb_width * 2;
    endcase
 end
 
@@ -408,34 +406,20 @@ always_ff @(posedge pxl_clk_i or negedge rst_ni) begin
       else begin
          // Advance screen address and offset within qword, depending on color depth
          case (cr_depth)
-            2'b00:
+            1'b0:
                if (pxl_offset == 32) begin
                   pxl_addr <= pxl_addr + 1;
                   pxl_offset <= 0;
                end
                else
                   pxl_offset <= pxl_offset + 32;
-            2'b01:
+            1'b1:
                if (pxl_offset == 48) begin
                   pxl_addr <= pxl_addr + 1;
                   pxl_offset <= 0;
                end
                else
                   pxl_offset <= pxl_offset + 16;
-            2'b10:
-               if (pxl_offset == 56) begin
-                  pxl_addr <= pxl_addr + 1;
-                  pxl_offset <= 0;
-               end
-               else
-                  pxl_offset <= pxl_offset + 8;
-            2'b11:
-               if (pxl_offset == 60) begin
-                  pxl_addr <= pxl_addr + 1;
-                  pxl_offset <= 0;
-               end
-               else
-                  pxl_offset <= pxl_offset + 4;
          endcase
 
          // Prevent data mover from repeating the action
@@ -480,34 +464,18 @@ end
 
 function [23:0] unpack16 (input [15:0] color);
    unpack16 = {
-      color[15:11], color[15:13],
+      color[ 4: 0], color[ 4: 2],
       color[10: 5], color[10: 9],
-      color[ 4: 0], color[ 4: 2]
+      color[15:11], color[15:13]
    };
-endfunction
-
-function [23:0] unpack8 (input [7:0] color);
-   unpack8 = {
-      {2{color[7:5]}}, color[7:6],
-      {2{color[4:2]}}, color[4:3],
-      {4{color[1:0]}}
-   };
-endfunction
-
-function [23:0] unpack4 (input [3:0] color);
-   unpack4 = {6{color}};
 endfunction
 
 always_comb begin
    case (cr_depth)
-      2'b00:
+      1'b0:
          color = rawcolor >> pxl_offset_delayed;
-      2'b01:
+      1'b1:
          color = unpack16(rawcolor >> pxl_offset_delayed);
-      2'b10:
-         color = unpack8 (rawcolor >> pxl_offset_delayed);
-      2'b11:
-         color = unpack4 (rawcolor >> pxl_offset_delayed);
     endcase
 end
 
@@ -516,9 +484,9 @@ logic [23:0] disp_color;
 assign disp_color = pxl_en_delayed & cr_enable ? (en_delayed ? color : cr_bg_color) : 0;
 
 // Output color if enabled
-assign red   = disp_color[23:16];
+assign red   = disp_color[ 7: 0];
 assign green = disp_color[15: 8];
-assign blue  = disp_color[ 7: 0];
+assign blue  = disp_color[23:16];
 assign pixel_o = pxl_en_delayed & cr_enable;
 
 endmodule
