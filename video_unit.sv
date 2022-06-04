@@ -6,6 +6,7 @@ module video_unit (
    output [7:0] red,
    output [7:0] green,
    output [7:0] blue,
+  output logic pixel_o,
    output logic hsync,
    output logic vsync,
 
@@ -299,7 +300,7 @@ logic [15:0] v_counter;
 
 // Logic to update h and v counters
 always_ff @(posedge pxl_clk_i or negedge rst_ni) begin
-  if (!rstn) begin
+  if (!rst_ni) begin
     h_counter <= 0;
     v_counter <= 0;
   end else begin
@@ -518,5 +519,6 @@ assign disp_color = pxl_en_delayed & cr_enable ? (en_delayed ? color : cr_bg_col
 assign red   = disp_color[23:16];
 assign green = disp_color[15: 8];
 assign blue  = disp_color[ 7: 0];
+assign pixel_o = pxl_en_delayed & cr_enable;
 
 endmodule
