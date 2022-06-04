@@ -9,6 +9,11 @@ module video_unit (
    output logic hsync,
    output logic vsync,
 
+  // Pixel clock control and input
+  output logic [7:0] pxl_clk_freq_o,
+  input  logic       pxl_clk_i,
+  input  logic       pxl_clk_en_i,
+
    /* DMA Controller */
    input  aclk,
    input  aresetn,
@@ -19,9 +24,6 @@ module video_unit (
    input  s_nasti_aresetn,
    nasti_channel.slave  s_nasti
 );
-
-logic pxl_clk;
-logic pxl_clk_en;
 
 /* VGA controller related logic */
 logic en;
@@ -43,6 +45,7 @@ logic [1:0]  cr_depth;
 
 logic cr_enable;
 logic [7:0] cr_pxlfreq;
+assign pxl_clk_freq_o = cr_pxlfreq;
 
 // hsync, vsync polarity. 0 selects positive, 1 selects negative
 logic cr_hsync_pol;
@@ -189,12 +192,12 @@ always_ff @(posedge mem_clk or negedge rst_ni)
    end
 
 // Delay write to cr_base until next vsync to avoid tearing
-always_ff @(posedge pxl_clk or negedge rst_ni)
+always_ff @(posedge pxl_clk_i or negedge rst_ni)
    if (!rst_ni) begin
       cr_base      <= 15'd0;
       cr_bg_color  <= 24'hFFFFFF;
    end
-   else if (pxl_clk_en) begin
+   else if (pxl_clk_en_i) begin
       if (vsync == !cr_vsync_pol | !cr_enable) begin
          cr_base     <= cr_base_delay;
          cr_bg_color <= cr_bg_color_delay;
@@ -228,8 +231,8 @@ dual_port_bram #(
    .write_a (buffer_wrdata),
    .read_a  (buffer_rddata),
 
-   .clk_b   (pxl_clk),
-   .en_b    (en & pxl_clk_en),
+   .clk_b   (pxl_clk_i),
+   .en_b    (en & pxl_clk_en_i),
    .we_b    (8'd0),
    .addr_b  (pxl_addr),
    .write_b (64'd0),
@@ -282,21 +285,6 @@ assign dma.b_ready = 0;
 assign buffer_ch.ar_valid = 0;
 assign buffer_ch.r_ready = 0;
 
-
-/* Clock freq choosing */
-clk_en_gen clk_gen (
-   .clk  (pxl_clk),
-   .rst_ni (rst_ni),
-   .freq (cr_pxlfreq),
-   .en   (pxl_clk_en)
-);
-
-clk_wiz_vga clk_conv(
-    .clk_in1  (clk),
-    .resetn   (rst_ni),
-    .clk_out1 (pxl_clk)
-);
-
 /* VGA Controller */
 
 // This is a three-stage pipeline VGA controller
@@ -310,7 +298,7 @@ logic [15:0] h_counter;
 logic [15:0] v_counter;
 
 // Logic to update h and v counters
-always_ff @(posedge pxl_clk or negedge rst_ni) begin
+always_ff @(posedge pxl_clk_i or negedge rst_ni) begin
   if (!rstn) begin
     h_counter <= 0;
     v_counter <= 0;
@@ -319,7 +307,7 @@ always_ff @(posedge pxl_clk or negedge rst_ni) begin
       // If monitor is turned off, reset counters
       h_counter <= 0;
       v_counter <= 0;
-    end else if (pxl_clk_en) begin
+    end else if (pxl_clk_en_i) begin
       if (h_counter == cr_h_total - 1) begin
         h_counter <= 0;
         if (v_counter == cr_v_total - 1) begin
@@ -348,8 +336,8 @@ logic dma_en_delay;
 
 logic pxl_en;
 
-always_ff @(posedge pxl_clk) begin
-   if (pxl_clk_en) begin
+always_ff @(posedge pxl_clk_i) begin
+   if (pxl_clk_en_i) begin
       // Mute output when monitor is disabled
       if (!cr_enable)
          hsync_delay <= 0;
@@ -388,12 +376,12 @@ always_comb begin
    endcase
 end
 
-always_ff @(posedge pxl_clk or negedge rst_ni) begin
+always_ff @(posedge pxl_clk_i or negedge rst_ni) begin
    if (!rst_ni) begin
       dma_en_delay <= 0;
       dma_src_addr_delay <= 0;
    end
-   else if (pxl_clk_en && cr_enable) begin
+   else if (pxl_clk_en_i && cr_enable) begin
       if (h_counter == 0) begin
          if (v_counter < cr_fb_height) begin
             pxl_addr <= {v_counter[0], 11'd0};
@@ -473,8 +461,8 @@ end
 logic en_delayed;
 logic pxl_en_delayed;
 
-always_ff @(posedge pxl_clk) begin
-   if (pxl_clk_en) begin
+always_ff @(posedge pxl_clk_i) begin
+   if (pxl_clk_en_i) begin
       // These delays the generation of hsync and vsync signals by one clock cycle
       // since we need one clock cycle to get the RGB data
       hsync <= hsync_delay;
