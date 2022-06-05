@@ -1,19 +1,21 @@
 module video_unit (
-   /*  VGA IOs */
-   input  clk,
-   // Reset, active high
-   input  rst_ni,
-   output [7:0] red,
-   output [7:0] green,
-   output [7:0] blue,
-  output logic pixel_o,
-   output logic hsync,
-   output logic vsync,
+  // Bus clock and reset.
+  input  logic clk_i,
+  input  logic rst_ni,
 
   // Pixel clock control and input
   output logic [7:0] pxl_clk_freq_o,
   input  logic       pxl_clk_i,
   input  logic       pxl_clk_en_i,
+
+   // Video output signals.
+   // They are synchronized to the pixel clock.
+  output [7:0] red_o,
+  output [7:0] green_o,
+  output [7:0] blue_o,
+  output logic pixel_o,
+  output logic hsync_o,
+  output logic vsync_o,
 
    /* DMA Controller */
    input  aclk,
@@ -199,7 +201,7 @@ always_ff @(posedge pxl_clk_i or negedge rst_ni)
       cr_bg_color  <= 24'hFFFFFF;
    end
    else if (pxl_clk_en_i) begin
-      if (vsync == !cr_vsync_pol | !cr_enable) begin
+      if (vsync_o == !cr_vsync_pol | !cr_enable) begin
          cr_base     <= cr_base_delay;
          cr_bg_color <= cr_bg_color_delay;
       end
@@ -450,8 +452,8 @@ always_ff @(posedge pxl_clk_i) begin
    if (pxl_clk_en_i) begin
       // These delays the generation of hsync and vsync signals by one clock cycle
       // since we need one clock cycle to get the RGB data
-      hsync <= hsync_delay;
-      vsync <= vsync_delay;
+      hsync_o <= hsync_delay;
+      vsync_o <= vsync_delay;
 
       en_delayed <= en;
       pxl_en_delayed <= pxl_en;
@@ -484,9 +486,9 @@ logic [23:0] disp_color;
 assign disp_color = pxl_en_delayed & cr_enable ? (en_delayed ? color : cr_bg_color) : 0;
 
 // Output color if enabled
-assign red   = disp_color[ 7: 0];
-assign green = disp_color[15: 8];
-assign blue  = disp_color[23:16];
+assign red_o   = disp_color[ 7: 0];
+assign green_o = disp_color[15: 8];
+assign blue_o  = disp_color[23:16];
 assign pixel_o = pxl_en_delayed & cr_enable;
 
 endmodule
