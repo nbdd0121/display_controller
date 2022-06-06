@@ -30,86 +30,76 @@ module video_unit (
    nasti_channel.master dma
 );
 
-/* VGA controller related logic */
-logic en;
-logic [63:0] rawcolor;
-logic [23:0] color;
-// Pixel address in memory, unit is 8-byte
-logic [11:0]  pxl_addr;
-// Offset within the byte
-logic [7:0]  pxl_offset;
-logic [7:0]  pxl_offset_delayed;
+  //////////////////////////////
+  // region Control registers //
 
-/* Control registers */
+  // Register addresses
+  localparam CR_ENABLE     = 6'h00;
+  localparam CR_PXLFREQ    = 6'h01;
+  localparam CR_POLARITY   = 6'h02;
+  localparam CR_H_TOTAL    = 6'h08;
+  localparam CR_H_END_DISP = 6'h09;
+  localparam CR_H_SRT_SYNC = 6'h0A;
+  localparam CR_H_END_SYNC = 6'h0B;
+  localparam CR_V_TOTAL    = 6'h0C;
+  localparam CR_V_END_DISP = 6'h0D;
+  localparam CR_V_SRT_SYNC = 6'h0E;
+  localparam CR_V_END_SYNC = 6'h0F;
 
-// Base register, must be 8-byte aligned
-logic [63:0] cr_base;
-logic [63:0] cr_base_delay;
+  localparam CR_FB_ENABLE    = 6'h10;
+  localparam CR_FB_BASE      = 6'h12;
+  localparam CR_FB_BASE_HIGH = 6'h13;
+  localparam CR_FB_WIDTH     = 6'h14;
+  localparam CR_FB_HEIGHT    = 6'h15;
+  localparam CR_FB_DEPTH     = 6'h16;
+  localparam CR_FB_BPL       = 6'h17;
+  localparam CR_BG_COLOR     = 6'h18;
 
-logic cr_depth;
+  // Whether display output is enabled.
+  logic cr_enable;
 
-logic cr_enable;
-logic [7:0] cr_pxlfreq;
-assign pxl_clk_freq_o = cr_pxlfreq;
+  // Pixel frequency. Can only be changed when display is disabled.
+  logic [7:0] cr_pxlfreq;
+  assign pxl_clk_freq_o = cr_pxlfreq;
 
-// hsync, vsync polarity. 0 selects positive, 1 selects negative
-logic cr_hsync_pol;
-logic cr_vsync_pol;
+  // HSync, VSync polarity. 0 selects positive, 1 selects negative.
+  // Can only be changed when display is disabled.
+  logic cr_hsync_pol;
+  logic cr_vsync_pol;
 
-// Framebuffer dimension control
-logic [11:0] cr_fb_width;
-logic [11:0] cr_fb_height;
-// Since this is fed to DMA, it must be 8-byte aligned
-logic [13:0] cr_fb_bpl;
+  // Timing registers. Can only be changed when display is disabled.
+  logic [15:0] cr_h_total;
+  logic [15:0] cr_h_end_disp;
+  logic [15:0] cr_h_srt_sync;
+  logic [15:0] cr_h_end_sync;
+  logic [15:0] cr_v_total;
+  logic [15:0] cr_v_end_disp;
+  logic [15:0] cr_v_srt_sync;
+  logic [15:0] cr_v_end_sync;
 
-// Outside framebuffer fallback color
-logic [23:0] cr_bg_color;
-logic [23:0] cr_bg_color_delay;
+  logic cr_fb_enable;
 
-// CRT registers
-logic [15:0] cr_h_total;
-logic [15:0] cr_h_end_disp;
-logic [15:0] cr_h_srt_sync;
-logic [15:0] cr_h_end_sync;
-logic [15:0] cr_v_total;
-logic [15:0] cr_v_end_disp;
-logic [15:0] cr_v_srt_sync;
-logic [15:0] cr_v_end_sync;
+  // Base register, must be 8-byte aligned
+  logic [63:0] cr_fb_base;
+  logic [63:0] cr_fb_base_delay;
 
-/* Constants and enumerations */
-localparam CR_BASE       = 6'h0;
-localparam CR_BASE_HIGH  = 6'h1;
-localparam CR_DEPTH      = 6'h2;
-localparam CR_ENABLE     = 6'h3;
-localparam CR_POLARITY   = 6'h4;
-localparam CR_PXLFREQ    = 6'h5;
-localparam CR_FB_WIDTH   = 6'h6;
-localparam CR_FB_HEIGHT  = 6'h7;
-localparam CR_FB_BPL     = 6'h8;
-localparam CR_BG_COLOR   = 6'h9;
+  // Framebuffer geometry control
+  logic [11:0] cr_fb_width;
+  logic [11:0] cr_fb_height;
+  logic        cr_fb_depth;
+  // Since this is fed to DMA, it must be 8-byte aligned
+  logic [13:0] cr_fb_bpl;
 
-localparam CR_H_TOTAL    = 6'h10;
-localparam CR_H_END_DISP = 6'h11;
-localparam CR_H_SRT_SYNC = 6'h12;
-localparam CR_H_END_SYNC = 6'h13;
-localparam CR_V_TOTAL    = 6'h14;
-localparam CR_V_END_DISP = 6'h15;
-localparam CR_V_SRT_SYNC = 6'h16;
-localparam CR_V_END_SYNC = 6'h17;
+  // Fallback color for pixcels outside framebuffer
+  logic [23:0] cr_bg_color;
+  logic [23:0] cr_bg_color_delay;
 
-/* Control register R/W */
-always_ff @(posedge clk_i or negedge rst_ni)
-   if (!rst_ni) begin
-      cr_base_delay  <= 15'd0;
-      cr_depth       <= 1'd0;
+  always_ff @(posedge clk_i or negedge rst_ni) begin
+    if (!rst_ni) begin
       cr_enable      <= 1'd0;
       cr_pxlfreq     <= 8'd25;
       cr_hsync_pol   <= 1'd1;
       cr_vsync_pol   <= 1'd1;
-      cr_fb_width    <= 12'd640;
-      cr_fb_height   <= 12'd480;
-      cr_fb_bpl      <= 14'd2048;
-      cr_bg_color_delay <= 24'hFFFFFF;
 
       cr_h_total     <= 16'd800;
       cr_h_end_disp  <= 16'd640;
@@ -119,47 +109,52 @@ always_ff @(posedge clk_i or negedge rst_ni)
       cr_v_end_disp  <= 16'd480;
       cr_v_srt_sync  <= 16'd490;
       cr_v_end_sync  <= 16'd492;
-   end
-   else if (ctrl_en_i) begin
-      case (ctrl_addr_i[7:2])
-         CR_BASE      : ctrl_rddata_o <= cr_base[31:0];
-         CR_BASE_HIGH : ctrl_rddata_o <= cr_base[63:32];
-         CR_DEPTH     : ctrl_rddata_o <= {31'd0, cr_depth};
-         CR_ENABLE    : ctrl_rddata_o <= {31'd0, cr_enable};
-         CR_POLARITY  : ctrl_rddata_o <= {30'd0, cr_vsync_pol, cr_hsync_pol};
-         CR_PXLFREQ   : ctrl_rddata_o <= {24'd0, cr_pxlfreq};
-         CR_FB_WIDTH  : ctrl_rddata_o <= {20'd0, cr_fb_width};
-         CR_FB_HEIGHT : ctrl_rddata_o <= {20'd0, cr_fb_height};
-         CR_FB_BPL    : ctrl_rddata_o <= {18'd0, cr_fb_bpl};
-         CR_BG_COLOR  : ctrl_rddata_o <= { 8'd0, cr_bg_color};
 
-         CR_H_TOTAL   : ctrl_rddata_o <= {16'd0, cr_h_total   };
-         CR_H_END_DISP: ctrl_rddata_o <= {16'd0, cr_h_end_disp};
-         CR_H_SRT_SYNC: ctrl_rddata_o <= {16'd0, cr_h_srt_sync};
-         CR_H_END_SYNC: ctrl_rddata_o <= {16'd0, cr_h_end_sync};
-         CR_V_TOTAL   : ctrl_rddata_o <= {16'd0, cr_v_total   };
-         CR_V_END_DISP: ctrl_rddata_o <= {16'd0, cr_v_end_disp};
-         CR_V_SRT_SYNC: ctrl_rddata_o <= {16'd0, cr_v_srt_sync};
-         CR_V_END_SYNC: ctrl_rddata_o <= {16'd0, cr_v_end_sync};
-         default: ctrl_rddata_o <= 32'd0;
-      endcase
+      cr_fb_enable      <= 1'b0;
+      cr_fb_base_delay  <= 15'd0;
+      cr_fb_width       <= 12'd640;
+      cr_fb_height      <= 12'd480;
+      cr_fb_depth       <= 1'd0;
+      cr_fb_bpl         <= 14'd2048;
+      cr_bg_color_delay <= 24'hFFFFFF;
+    end else begin
+      if (ctrl_en_i) begin
+        unique case (ctrl_addr_i[7:2])
+          CR_ENABLE    : ctrl_rddata_o <= {31'd0, cr_enable};
+          CR_PXLFREQ   : ctrl_rddata_o <= {24'd0, cr_pxlfreq};
+          CR_POLARITY  : ctrl_rddata_o <= {30'd0, cr_vsync_pol, cr_hsync_pol};
 
-      if (&ctrl_we_i)
-         case (ctrl_addr_i[7:2])
-            CR_BASE      : cr_base_delay[31:0] <= ctrl_wrdata_i;
-            CR_BASE_HIGH : cr_base_delay[63:32] <= ctrl_wrdata_i;
-            CR_DEPTH     : if (!cr_enable) cr_depth      <= ctrl_wrdata_i[0];
+          CR_H_TOTAL   : ctrl_rddata_o <= {16'd0, cr_h_total   };
+          CR_H_END_DISP: ctrl_rddata_o <= {16'd0, cr_h_end_disp};
+          CR_H_SRT_SYNC: ctrl_rddata_o <= {16'd0, cr_h_srt_sync};
+          CR_H_END_SYNC: ctrl_rddata_o <= {16'd0, cr_h_end_sync};
+          CR_V_TOTAL   : ctrl_rddata_o <= {16'd0, cr_v_total   };
+          CR_V_END_DISP: ctrl_rddata_o <= {16'd0, cr_v_end_disp};
+          CR_V_SRT_SYNC: ctrl_rddata_o <= {16'd0, cr_v_srt_sync};
+          CR_V_END_SYNC: ctrl_rddata_o <= {16'd0, cr_v_end_sync};
+
+          CR_FB_ENABLE    : ctrl_rddata_o <= {31'd0, cr_fb_enable};
+          CR_FB_BASE      : ctrl_rddata_o <= cr_fb_base[31:0];
+          CR_FB_BASE_HIGH : ctrl_rddata_o <= cr_fb_base[63:32];
+          CR_FB_WIDTH     : ctrl_rddata_o <= {20'd0, cr_fb_width};
+          CR_FB_HEIGHT    : ctrl_rddata_o <= {20'd0, cr_fb_height};
+          CR_FB_DEPTH     : ctrl_rddata_o <= {31'd0, cr_fb_depth};
+          CR_FB_BPL       : ctrl_rddata_o <= {18'd0, cr_fb_bpl};
+          CR_BG_COLOR     : ctrl_rddata_o <= { 8'd0, cr_bg_color};
+          default: ctrl_rddata_o <= 32'd0;
+        endcase
+
+        if (&ctrl_we_i) begin
+          unique case (ctrl_addr_i[7:2])
             CR_ENABLE    : cr_enable <= ctrl_wrdata_i[0];
-            CR_POLARITY  :
-               if (!cr_enable) begin
+            CR_PXLFREQ   : if (!cr_enable) cr_pxlfreq    <= ctrl_wrdata_i[ 7:0];
+            CR_POLARITY  : begin
+              if (!cr_enable) begin
                   cr_vsync_pol <= ctrl_wrdata_i[1];
                   cr_hsync_pol <= ctrl_wrdata_i[0];
-               end
-            CR_PXLFREQ   : if (!cr_enable) cr_pxlfreq    <= ctrl_wrdata_i[ 7:0];
-            CR_FB_WIDTH  : if (!cr_enable) cr_fb_width   <= ctrl_wrdata_i[11:0];
-            CR_FB_HEIGHT : if (!cr_enable) cr_fb_height  <= ctrl_wrdata_i[11:0];
-            CR_FB_BPL    : if (!cr_enable) cr_fb_bpl     <= {ctrl_wrdata_i[13:3], 3'd0};
-            CR_BG_COLOR  : cr_bg_color_delay  <= ctrl_wrdata_i[23:0];
+              end
+            end
+
             CR_H_TOTAL   : if (!cr_enable) cr_h_total    <= ctrl_wrdata_i[15:0];
             CR_H_END_DISP: if (!cr_enable) cr_h_end_disp <= ctrl_wrdata_i[15:0];
             CR_H_SRT_SYNC: if (!cr_enable) cr_h_srt_sync <= ctrl_wrdata_i[15:0];
@@ -168,21 +163,47 @@ always_ff @(posedge clk_i or negedge rst_ni)
             CR_V_END_DISP: if (!cr_enable) cr_v_end_disp <= ctrl_wrdata_i[15:0];
             CR_V_SRT_SYNC: if (!cr_enable) cr_v_srt_sync <= ctrl_wrdata_i[15:0];
             CR_V_END_SYNC: if (!cr_enable) cr_v_end_sync <= ctrl_wrdata_i[15:0];
-         endcase
-   end
 
-// Delay write to cr_base until next vsync to avoid tearing
+            CR_FB_ENABLE   : cr_fb_enable <= ctrl_wrdata_i[0];
+            CR_FB_BASE     : cr_fb_base_delay[31:0] <= ctrl_wrdata_i;
+            CR_FB_BASE_HIGH: cr_fb_base_delay[63:32] <= ctrl_wrdata_i;
+            CR_FB_WIDTH    : if (!cr_enable) cr_fb_width  <= ctrl_wrdata_i[11:0];
+            CR_FB_HEIGHT   : if (!cr_enable) cr_fb_height <= ctrl_wrdata_i[11:0];
+            CR_FB_DEPTH    : if (!cr_enable) cr_fb_depth  <= ctrl_wrdata_i[0];
+            CR_FB_BPL      : if (!cr_enable) cr_fb_bpl    <= {ctrl_wrdata_i[13:3], 3'd0};
+            CR_BG_COLOR    : cr_bg_color_delay  <= ctrl_wrdata_i[23:0];
+
+          endcase
+        end
+      end
+    end
+  end
+
+  // #endregion
+  //////////////////////////////
+
+// Delay write to cr_fb_base until next vsync to avoid tearing
 always_ff @(posedge pxl_clk_i or negedge rst_ni)
    if (!rst_ni) begin
-      cr_base      <= 15'd0;
+      cr_fb_base      <= 15'd0;
       cr_bg_color  <= 24'hFFFFFF;
    end
    else if (pxl_clk_en_i) begin
       if (vsync_o == !cr_vsync_pol | !cr_enable) begin
-         cr_base     <= cr_base_delay;
+         cr_fb_base     <= cr_fb_base_delay;
          cr_bg_color <= cr_bg_color_delay;
       end
    end
+
+/* VGA controller related logic */
+logic en;
+logic [63:0] rawcolor;
+logic [23:0] color;
+// Pixel address in memory, unit is 8-byte
+logic [11:0]  pxl_addr;
+// Offset within the byte
+logic [7:0]  pxl_offset;
+logic [7:0]  pxl_offset_delayed;
 
 /* Framebuffer */
 
@@ -340,7 +361,7 @@ always_ff @(posedge pxl_clk_i) begin
       else begin
          // Enable image output if within display area
          en <= h_counter < cr_fb_width && v_counter < cr_fb_height;
-         pxl_en <= h_counter < cr_h_end_disp && v_counter < cr_v_end_disp;
+         pxl_en <= h_counter < cr_h_end_disp && v_counter < cr_v_end_disp && cr_fb_enable;
       end
    end
 end
@@ -348,7 +369,7 @@ end
 logic [14:0] fb_width_in_bytes;
 
 always_comb begin
-   case (cr_depth)
+   case (cr_fb_depth)
       1'b0: fb_width_in_bytes = cr_fb_width * 4;
       1'b1: fb_width_in_bytes = cr_fb_width * 2;
    endcase
@@ -369,11 +390,11 @@ always_ff @(posedge pxl_clk_i or negedge rst_ni) begin
                // Special case if this is first line
                // After screen is re-enabled, we need to make sure
                // dma_src_addr_delay is updated
-               dma_src_addr_delay <= cr_base_delay + cr_fb_bpl;
+               dma_src_addr_delay <= cr_fb_base_delay + cr_fb_bpl;
             else
             if (v_counter == cr_fb_height - 1)
                // For last line, reset start address to base
-               dma_src_addr_delay <= cr_base_delay;
+               dma_src_addr_delay <= cr_fb_base_delay;
             else
                dma_src_addr_delay <= dma_src_addr_delay + cr_fb_bpl;
 
@@ -384,7 +405,7 @@ always_ff @(posedge pxl_clk_i or negedge rst_ni) begin
       end
       else begin
          // Advance screen address and offset within qword, depending on color depth
-         case (cr_depth)
+         case (cr_fb_depth)
             1'b0:
                if (pxl_offset == 32) begin
                   pxl_addr <= pxl_addr + 1;
@@ -450,7 +471,7 @@ function [23:0] unpack16 (input [15:0] color);
 endfunction
 
 always_comb begin
-   case (cr_depth)
+   case (cr_fb_depth)
       1'b0:
          color = rawcolor >> pxl_offset_delayed;
       1'b1:
