@@ -1,3 +1,5 @@
+`include "axi_util.svh"
+
 module video_unit (
   // Bus clock and reset.
   input  logic clk_i,
@@ -24,10 +26,7 @@ module video_unit (
   input  logic [31:0] ctrl_wrdata_i,
   output logic [31:0] ctrl_rddata_o,
 
-   /* DMA Controller */
-   input  aclk,
-   input  aresetn,
-   nasti_channel.master dma
+  `AXI_DECLARE_HOST_PORT(DataWidth, AddrWidth, IdWidth, dma)
 );
 
   //////////////////////////////
@@ -207,12 +206,10 @@ logic [7:0]  pxl_offset_delayed;
 
 /* Framebuffer */
 
-logic buffer_clk;
 logic buffer_en;
 logic [7:0] buffer_we;
-logic [16:0] buffer_addr;
+logic [11:0] buffer_addr;
 logic [63:0] buffer_wrdata;
-logic [63:0] buffer_rddata;
 
 logic dma_done;
 logic [63:0] dma_src_addr;
@@ -220,71 +217,64 @@ logic [63:0] dma_dest_addr;
 logic [63:0] dma_length;
 logic dma_en;
 
-// 32KiB Line Buffer, (1 << 12) * 64Bits
-dual_port_bram #(
-   .ADDR_WIDTH (12),
-   .DATA_WIDTH (64)
-) videomem (
-   .clk_a   (buffer_clk),
-   .en_a    (buffer_en),
-   .we_a    (buffer_we),
-   .addr_a  (buffer_addr[14:3]),
-   .write_a (buffer_wrdata),
-   .read_a  (buffer_rddata),
+  logic [63:0] buffer_we_expanded;
+  always_comb begin
+    for (int i = 0; i < 8; i++) begin
+      buffer_we_expanded[i * 8 +: 8] <= buffer_we[i] ? 8'hff : 8'h00;
+    end
+  end
 
-   .clk_b   (pxl_clk_i),
-   .en_b    (en & pxl_clk_en_i),
-   .we_b    (8'd0),
-   .addr_b  (pxl_addr),
-   .write_b (64'd0),
-   .read_b  (rawcolor)
-);
+  // 32KiB Line Buffer, (1 << 12) * 64Bits
+  prim_generic_ram_simple_2p #(
+    .Width (64),
+    .Depth (2 ** 12),
+    .DataBitsPerMask (8)
+  ) videomem (
+    .clk_a_i (pxl_clk_i),
+    .clk_b_i (clk_i),
+    .a_req_i (en & pxl_clk_en_i),
+    .a_addr_i (pxl_addr),
+    .a_rdata_o (rawcolor),
+    .b_req_i (buffer_en),
+    .b_addr_i (buffer_addr),
+    .b_wdata_i (buffer_wrdata),
+    .b_wmask_i (buffer_we_expanded)
+  );
 
-// Internal NASTI Channel connecting buffer with DMA
-nasti_channel # (
-   .ADDR_WIDTH(64),
-   .DATA_WIDTH(64)
-) buffer_ch();
+  `AXI_DECLARE(DataWidth, AddrWidth, IdWidth, buffer);
 
-// Internal NASTI BRAM Controller to write to the buffer
-nasti_bram_ctrl # (
-   .ADDR_WIDTH (64),
-   .DATA_WIDTH (64),
-   .BRAM_ADDR_WIDTH (15)
-) buffer_ctrl (
-   .s_nasti_aclk (aclk),
-   .s_nasti_aresetn (aresetn),
-   .s_nasti (buffer_ch),
-   .bram_clk (buffer_clk),
-   .bram_en (buffer_en),
-   .bram_we (buffer_we),
-   .bram_addr (buffer_addr),
-   .bram_wrdata (buffer_wrdata),
-   .bram_rddata (buffer_rddata)
-);
+  // Internal NASTI BRAM Controller to write to the buffer
+  axi_bram_ctrl # (
+    .AddrWidth (64),
+    .DataWidth (64),
+    .BRAM_ADDR_WIDTH (12)
+  ) buffer_ctrl (
+    .clk_i (clk_i),
+    .rst_ni (rst_ni),
+    `AXI_CONNECT_DEVICE_PORT(host, buffer),
+    .bram_en (buffer_en),
+    .bram_we (buffer_we),
+    .bram_addr (buffer_addr),
+    .bram_wrdata (buffer_wrdata),
+    .bram_rddata ()
+  );
 
-// Data mover from framebuffer to internal buffer
-nasti_data_mover # (
-   .ADDR_WIDTH(64),
-   .DATA_WIDTH(64),
-   .MAX_BURST_LENGTH(8)
-) data_mover (
-   .aclk (aclk),
-   .aresetn (aresetn),
-   .src (dma),
-   .dest (buffer_ch),
-   .src_addr (dma_src_addr),
-   .dest_addr (dma_dest_addr),
-   .length (dma_length),
-   .en (dma_en),
-   .done (dma_done)
-);
-
-assign dma.aw_valid = 0;
-assign dma.w_valid = 0;
-assign dma.b_ready = 0;
-assign buffer_ch.ar_valid = 0;
-assign buffer_ch.r_ready = 0;
+  // Data mover from framebuffer to internal buffer
+  axi_data_mover # (
+    .AddrWidth (64),
+    .DataWidth (64),
+    .MaxBurstLen (8)
+  ) data_mover (
+    .clk_i (clk_i),
+    .rst_ni (rst_ni),
+    `AXI_FORWARD_HOST_PORT(src, dma),
+    `AXI_CONNECT_HOST_PORT(dst, buffer),
+    .ready_o (dma_done),
+    .valid_i (dma_en),
+    .src_i (dma_src_addr),
+    .dst_i (dma_dest_addr),
+    .len_i (dma_length)
+  );
 
 /* VGA Controller */
 
@@ -428,8 +418,8 @@ always_ff @(posedge pxl_clk_i or negedge rst_ni) begin
    end
 end
 
-always_ff @(posedge aclk or negedge aresetn) begin
-   if (!aresetn) begin
+always_ff @(posedge clk_i or negedge rst_ni) begin
+   if (!rst_ni) begin
       dma_en <= 0;
    end
    else begin
