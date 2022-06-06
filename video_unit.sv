@@ -17,15 +17,17 @@ module video_unit (
   output logic hsync_o,
   output logic vsync_o,
 
+  // BRAM port for control registers, 256 Bytes in size
+  input  logic        ctrl_en_i,
+  input  logic        ctrl_we_i,
+  input  logic [7:0]  ctrl_addr_i,
+  input  logic [31:0] ctrl_wrdata_i,
+  output logic [31:0] ctrl_rddata_o,
+
    /* DMA Controller */
    input  aclk,
    input  aresetn,
-   nasti_channel.master dma,
-
-   /* Control Register Acccess */
-   input  s_nasti_aclk,
-   input  s_nasti_aresetn,
-   nasti_channel.slave  s_nasti
+   nasti_channel.master dma
 );
 
 /* VGA controller related logic */
@@ -75,53 +77,28 @@ logic [15:0] cr_v_srt_sync;
 logic [15:0] cr_v_end_sync;
 
 /* Constants and enumerations */
-localparam CR_BASE       = 10'h0;
-localparam CR_BASE_HIGH  = 10'h1;
-localparam CR_DEPTH      = 10'h2;
-localparam CR_ENABLE     = 10'h3;
-localparam CR_POLARITY   = 10'h4;
-localparam CR_PXLFREQ    = 10'h5;
-localparam CR_FB_WIDTH   = 10'h6;
-localparam CR_FB_HEIGHT  = 10'h7;
-localparam CR_FB_BPL     = 10'h8;
-localparam CR_BG_COLOR   = 10'h9;
+localparam CR_BASE       = 6'h0;
+localparam CR_BASE_HIGH  = 6'h1;
+localparam CR_DEPTH      = 6'h2;
+localparam CR_ENABLE     = 6'h3;
+localparam CR_POLARITY   = 6'h4;
+localparam CR_PXLFREQ    = 6'h5;
+localparam CR_FB_WIDTH   = 6'h6;
+localparam CR_FB_HEIGHT  = 6'h7;
+localparam CR_FB_BPL     = 6'h8;
+localparam CR_BG_COLOR   = 6'h9;
 
-localparam CR_H_TOTAL    = 10'h10;
-localparam CR_H_END_DISP = 10'h11;
-localparam CR_H_SRT_SYNC = 10'h12;
-localparam CR_H_END_SYNC = 10'h13;
-localparam CR_V_TOTAL    = 10'h14;
-localparam CR_V_END_DISP = 10'h15;
-localparam CR_V_SRT_SYNC = 10'h16;
-localparam CR_V_END_SYNC = 10'h17;
+localparam CR_H_TOTAL    = 6'h10;
+localparam CR_H_END_DISP = 6'h11;
+localparam CR_H_SRT_SYNC = 6'h12;
+localparam CR_H_END_SYNC = 6'h13;
+localparam CR_V_TOTAL    = 6'h14;
+localparam CR_V_END_DISP = 6'h15;
+localparam CR_V_SRT_SYNC = 6'h16;
+localparam CR_V_END_SYNC = 6'h17;
 
 /* Control register R/W */
-logic mem_clk;
-logic mem_rst;
-logic mem_en;
-logic [3:0] mem_we;
-logic [11:0] mem_addr;
-logic [31:0] mem_write;
-logic [31:0] mem_read;
-
-nasti_lite_bram_ctrl # (
-   .ADDR_WIDTH (64),
-   .DATA_WIDTH (32),
-   .BRAM_ADDR_WIDTH (12)
-) ctrl (
-   .s_nasti_aclk    (s_nasti_aclk),
-   .s_nasti_aresetn (s_nasti_aresetn),
-   .s_nasti         (s_nasti),
-   .bram_clk        (mem_clk),
-   .bram_rst        (mem_rst),
-   .bram_en         (mem_en),
-   .bram_we         (mem_we),
-   .bram_addr       (mem_addr),
-   .bram_wrdata     (mem_write),
-   .bram_rddata     (mem_read)
-);
-
-always_ff @(posedge mem_clk or negedge rst_ni)
+always_ff @(posedge clk_i or negedge rst_ni)
    if (!rst_ni) begin
       cr_base_delay  <= 15'd0;
       cr_depth       <= 1'd0;
@@ -143,54 +120,54 @@ always_ff @(posedge mem_clk or negedge rst_ni)
       cr_v_srt_sync  <= 16'd490;
       cr_v_end_sync  <= 16'd492;
    end
-   else if (mem_en) begin
-      case (mem_addr[11:2])
-         CR_BASE      : mem_read <= cr_base[31:0];
-         CR_BASE_HIGH : mem_read <= cr_base[63:32];
-         CR_DEPTH     : mem_read <= {31'd0, cr_depth};
-         CR_ENABLE    : mem_read <= {31'd0, cr_enable};
-         CR_POLARITY  : mem_read <= {30'd0, cr_vsync_pol, cr_hsync_pol};
-         CR_PXLFREQ   : mem_read <= {24'd0, cr_pxlfreq};
-         CR_FB_WIDTH  : mem_read <= {20'd0, cr_fb_width};
-         CR_FB_HEIGHT : mem_read <= {20'd0, cr_fb_height};
-         CR_FB_BPL    : mem_read <= {18'd0, cr_fb_bpl};
-         CR_BG_COLOR  : mem_read <= { 8'd0, cr_bg_color};
+   else if (ctrl_en_i) begin
+      case (ctrl_addr_i[7:2])
+         CR_BASE      : ctrl_rddata_o <= cr_base[31:0];
+         CR_BASE_HIGH : ctrl_rddata_o <= cr_base[63:32];
+         CR_DEPTH     : ctrl_rddata_o <= {31'd0, cr_depth};
+         CR_ENABLE    : ctrl_rddata_o <= {31'd0, cr_enable};
+         CR_POLARITY  : ctrl_rddata_o <= {30'd0, cr_vsync_pol, cr_hsync_pol};
+         CR_PXLFREQ   : ctrl_rddata_o <= {24'd0, cr_pxlfreq};
+         CR_FB_WIDTH  : ctrl_rddata_o <= {20'd0, cr_fb_width};
+         CR_FB_HEIGHT : ctrl_rddata_o <= {20'd0, cr_fb_height};
+         CR_FB_BPL    : ctrl_rddata_o <= {18'd0, cr_fb_bpl};
+         CR_BG_COLOR  : ctrl_rddata_o <= { 8'd0, cr_bg_color};
 
-         CR_H_TOTAL   : mem_read <= {16'd0, cr_h_total   };
-         CR_H_END_DISP: mem_read <= {16'd0, cr_h_end_disp};
-         CR_H_SRT_SYNC: mem_read <= {16'd0, cr_h_srt_sync};
-         CR_H_END_SYNC: mem_read <= {16'd0, cr_h_end_sync};
-         CR_V_TOTAL   : mem_read <= {16'd0, cr_v_total   };
-         CR_V_END_DISP: mem_read <= {16'd0, cr_v_end_disp};
-         CR_V_SRT_SYNC: mem_read <= {16'd0, cr_v_srt_sync};
-         CR_V_END_SYNC: mem_read <= {16'd0, cr_v_end_sync};
-         default: mem_read <= 32'd0;
+         CR_H_TOTAL   : ctrl_rddata_o <= {16'd0, cr_h_total   };
+         CR_H_END_DISP: ctrl_rddata_o <= {16'd0, cr_h_end_disp};
+         CR_H_SRT_SYNC: ctrl_rddata_o <= {16'd0, cr_h_srt_sync};
+         CR_H_END_SYNC: ctrl_rddata_o <= {16'd0, cr_h_end_sync};
+         CR_V_TOTAL   : ctrl_rddata_o <= {16'd0, cr_v_total   };
+         CR_V_END_DISP: ctrl_rddata_o <= {16'd0, cr_v_end_disp};
+         CR_V_SRT_SYNC: ctrl_rddata_o <= {16'd0, cr_v_srt_sync};
+         CR_V_END_SYNC: ctrl_rddata_o <= {16'd0, cr_v_end_sync};
+         default: ctrl_rddata_o <= 32'd0;
       endcase
 
-      if (&mem_we)
-         case (mem_addr[11:2])
-            CR_BASE      : cr_base_delay[31:0] <= mem_write;
-            CR_BASE_HIGH : cr_base_delay[63:32] <= mem_write;
-            CR_DEPTH     : if (!cr_enable) cr_depth      <= mem_write[0];
-            CR_ENABLE    : cr_enable <= mem_write[0];
+      if (&ctrl_we_i)
+         case (ctrl_addr_i[7:2])
+            CR_BASE      : cr_base_delay[31:0] <= ctrl_wrdata_i;
+            CR_BASE_HIGH : cr_base_delay[63:32] <= ctrl_wrdata_i;
+            CR_DEPTH     : if (!cr_enable) cr_depth      <= ctrl_wrdata_i[0];
+            CR_ENABLE    : cr_enable <= ctrl_wrdata_i[0];
             CR_POLARITY  :
                if (!cr_enable) begin
-                  cr_vsync_pol <= mem_write[1];
-                  cr_hsync_pol <= mem_write[0];
+                  cr_vsync_pol <= ctrl_wrdata_i[1];
+                  cr_hsync_pol <= ctrl_wrdata_i[0];
                end
-            CR_PXLFREQ   : if (!cr_enable) cr_pxlfreq    <= mem_write[ 7:0];
-            CR_FB_WIDTH  : if (!cr_enable) cr_fb_width   <= mem_write[11:0];
-            CR_FB_HEIGHT : if (!cr_enable) cr_fb_height  <= mem_write[11:0];
-            CR_FB_BPL    : if (!cr_enable) cr_fb_bpl     <= {mem_write[13:3], 3'd0};
-            CR_BG_COLOR  : cr_bg_color_delay  <= mem_write[23:0];
-            CR_H_TOTAL   : if (!cr_enable) cr_h_total    <= mem_write[15:0];
-            CR_H_END_DISP: if (!cr_enable) cr_h_end_disp <= mem_write[15:0];
-            CR_H_SRT_SYNC: if (!cr_enable) cr_h_srt_sync <= mem_write[15:0];
-            CR_H_END_SYNC: if (!cr_enable) cr_h_end_sync <= mem_write[15:0];
-            CR_V_TOTAL   : if (!cr_enable) cr_v_total    <= mem_write[15:0];
-            CR_V_END_DISP: if (!cr_enable) cr_v_end_disp <= mem_write[15:0];
-            CR_V_SRT_SYNC: if (!cr_enable) cr_v_srt_sync <= mem_write[15:0];
-            CR_V_END_SYNC: if (!cr_enable) cr_v_end_sync <= mem_write[15:0];
+            CR_PXLFREQ   : if (!cr_enable) cr_pxlfreq    <= ctrl_wrdata_i[ 7:0];
+            CR_FB_WIDTH  : if (!cr_enable) cr_fb_width   <= ctrl_wrdata_i[11:0];
+            CR_FB_HEIGHT : if (!cr_enable) cr_fb_height  <= ctrl_wrdata_i[11:0];
+            CR_FB_BPL    : if (!cr_enable) cr_fb_bpl     <= {ctrl_wrdata_i[13:3], 3'd0};
+            CR_BG_COLOR  : cr_bg_color_delay  <= ctrl_wrdata_i[23:0];
+            CR_H_TOTAL   : if (!cr_enable) cr_h_total    <= ctrl_wrdata_i[15:0];
+            CR_H_END_DISP: if (!cr_enable) cr_h_end_disp <= ctrl_wrdata_i[15:0];
+            CR_H_SRT_SYNC: if (!cr_enable) cr_h_srt_sync <= ctrl_wrdata_i[15:0];
+            CR_H_END_SYNC: if (!cr_enable) cr_h_end_sync <= ctrl_wrdata_i[15:0];
+            CR_V_TOTAL   : if (!cr_enable) cr_v_total    <= ctrl_wrdata_i[15:0];
+            CR_V_END_DISP: if (!cr_enable) cr_v_end_disp <= ctrl_wrdata_i[15:0];
+            CR_V_SRT_SYNC: if (!cr_enable) cr_v_srt_sync <= ctrl_wrdata_i[15:0];
+            CR_V_END_SYNC: if (!cr_enable) cr_v_end_sync <= ctrl_wrdata_i[15:0];
          endcase
    end
 
