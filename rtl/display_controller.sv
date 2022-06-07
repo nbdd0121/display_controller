@@ -1,6 +1,6 @@
 `include "axi_util.svh"
 
-module video_unit #(
+module display_controller #(
   parameter DataWidth = 64,
   parameter AddrWidth = 64,
   parameter IdWidth = 1
