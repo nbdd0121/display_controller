@@ -233,22 +233,22 @@ module display_controller #(
         if (&ctrl_we_i) begin
           unique case (ctrl_addr_i[7:2])
             CR_ENABLE    : cr_enable <= ctrl_wrdata_i[0];
-            CR_PXLFREQ   : if (!cr_allow_timing_change) cr_pxlfreq    <= ctrl_wrdata_i[ 7:0];
+            CR_PXLFREQ   : if (cr_allow_timing_change) cr_pxlfreq    <= ctrl_wrdata_i[ 7:0];
             CR_POLARITY  : begin
-              if (!cr_allow_timing_change) begin
+              if (cr_allow_timing_change) begin
                   cr_vsync_pol <= ctrl_wrdata_i[1];
                   cr_hsync_pol <= ctrl_wrdata_i[0];
               end
             end
 
-            CR_H_TOTAL   : if (!cr_allow_timing_change) cr_h_total    <= ctrl_wrdata_i[15:0];
-            CR_H_END_DISP: if (!cr_allow_timing_change) cr_h_end_disp <= ctrl_wrdata_i[15:0];
-            CR_H_SRT_SYNC: if (!cr_allow_timing_change) cr_h_srt_sync <= ctrl_wrdata_i[15:0];
-            CR_H_END_SYNC: if (!cr_allow_timing_change) cr_h_end_sync <= ctrl_wrdata_i[15:0];
-            CR_V_TOTAL   : if (!cr_allow_timing_change) cr_v_total    <= ctrl_wrdata_i[15:0];
-            CR_V_END_DISP: if (!cr_allow_timing_change) cr_v_end_disp <= ctrl_wrdata_i[15:0];
-            CR_V_SRT_SYNC: if (!cr_allow_timing_change) cr_v_srt_sync <= ctrl_wrdata_i[15:0];
-            CR_V_END_SYNC: if (!cr_allow_timing_change) cr_v_end_sync <= ctrl_wrdata_i[15:0];
+            CR_H_TOTAL   : if (cr_allow_timing_change) cr_h_total    <= ctrl_wrdata_i[15:0];
+            CR_H_END_DISP: if (cr_allow_timing_change) cr_h_end_disp <= ctrl_wrdata_i[15:0];
+            CR_H_SRT_SYNC: if (cr_allow_timing_change) cr_h_srt_sync <= ctrl_wrdata_i[15:0];
+            CR_H_END_SYNC: if (cr_allow_timing_change) cr_h_end_sync <= ctrl_wrdata_i[15:0];
+            CR_V_TOTAL   : if (cr_allow_timing_change) cr_v_total    <= ctrl_wrdata_i[15:0];
+            CR_V_END_DISP: if (cr_allow_timing_change) cr_v_end_disp <= ctrl_wrdata_i[15:0];
+            CR_V_SRT_SYNC: if (cr_allow_timing_change) cr_v_srt_sync <= ctrl_wrdata_i[15:0];
+            CR_V_END_SYNC: if (cr_allow_timing_change) cr_v_end_sync <= ctrl_wrdata_i[15:0];
 
             CR_FB_COMMIT   : cr_fb_commit      <= ctrl_wrdata_i[0];
             CR_FB_BASE     : cr_fb_base[31:0]  <= ctrl_wrdata_i;
