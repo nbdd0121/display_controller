@@ -1,0 +1,37 @@
+CAPI=2:
+# Copyright 2021 Gary Guo.
+# Licensed under the Apache License, Version 2.0, see LICENSE for details.
+# SPDX-License-Identifier: Apache-2.0
+name: "garyguo.net:peripheral:display_controller:0.1"
+description: "Display Controller"
+
+filesets:
+  files_rtl:
+    depend:
+      - lowrisc:prim:flop_2sync
+      - lowrisc:prim:pulse_sync
+      - lowrisc:prim_generic:ram_simple_2p
+      - lowrisc:axi:common
+      - lowrisc:axi_lite:common
+      - garyguo.net:openip:axi_bram_ctrl
+    files:
+      - rtl/display_controller.sv
+      - rtl/axi_data_mover.sv
+    file_type: systemVerilogSource
+
+  files_lint_verilator:
+    files:
+      - verilator/lint_waiver.vlt: {file_type: vlt}
+
+targets:
+  default: &default_target
+    filesets:
+      - tool_verilator ? (files_lint_verilator)
+      - files_rtl
+    toplevel: display_controller
+  lint:
+    <<: *default_target
+    default_tool: verilator
+    tools:
+      verilator:
+        mode: lint-only
