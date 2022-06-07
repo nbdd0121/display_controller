@@ -24,7 +24,8 @@ module axi_data_mover #(
   `AXI_BIND_HOST_PORT(src, src);
   `AXI_BIND_HOST_PORT(dst, dst);
 
-  localparam AddrShift = $clog2(DataWidth / 8);
+  localparam DataWidthInBytes = DataWidth / 8;
+  localparam NonBurstSize = $clog2(DataWidthInBytes);
 
   // Unused channels.
   assign src_aw_valid = 1'b0;
@@ -70,7 +71,7 @@ module axi_data_mover #(
     src_ar_valid = 1'b0;
     src_ar = 'x;
     src_ar.id = 0;
-    src_ar.size = 3'b011;
+    src_ar.size = NonBurstSize;
     src_ar.burst = axi_pkg::BURST_INCR;
     src_ar.cache = 4'b0;
     src_ar.prot = 3'b0;
@@ -79,7 +80,7 @@ module axi_data_mover #(
     dst_aw_valid = 1'b0;
     dst_aw = 'x;
     dst_aw.id = 0;
-    dst_aw.size = 3'b011;
+    dst_aw.size = NonBurstSize;
     dst_aw.burst = axi_pkg::BURST_INCR;
     dst_aw.cache = 4'b0;
     dst_aw.prot = 3'b0;
@@ -107,12 +108,12 @@ module axi_data_mover #(
         dst_aw_valid = !dst_accepted_q;
         dst_aw.addr = dst_addr_q;
 
-        if ((len_q >> AddrShift) > MaxBurstLen) begin
+        if ((len_q >> NonBurstSize) > MaxBurstLen) begin
           src_ar.len = MaxBurstLen - 1;
           dst_aw.len = MaxBurstLen - 1;
         end else begin
-          src_ar.len = (len_q >> AddrShift) - 1;
-         dst_aw.len = (len_q >> AddrShift) - 1;
+          src_ar.len = (len_q >> NonBurstSize) - 1;
+          dst_aw.len = (len_q >> NonBurstSize) - 1;
         end
 
         if (src_ar_valid) begin
@@ -124,10 +125,10 @@ module axi_data_mover #(
         end
 
         if (src_accepted_d && dst_accepted_d) begin
-          if ((len_q >> AddrShift) > MaxBurstLen) begin
-            src_addr_d = src_addr_q + (MaxBurstLen << AddrShift);
-            dst_addr_d = dst_addr_q + (MaxBurstLen << AddrShift);
-            len_d = len_q - (MaxBurstLen << AddrShift);
+          if ((len_q >> NonBurstSize) > MaxBurstLen) begin
+            src_addr_d = src_addr_q + (MaxBurstLen << NonBurstSize);
+            dst_addr_d = dst_addr_q + (MaxBurstLen << NonBurstSize);
+            len_d = len_q - (MaxBurstLen << NonBurstSize);
           end else begin
             src_addr_d = 'x;
             dst_addr_d = 'x;
