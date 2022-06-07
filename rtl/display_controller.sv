@@ -501,6 +501,7 @@ module display_controller #(
 
   logic end_of_frame_sync_q;
   logic end_of_line_sync_q;
+  logic dma_enabled;
 
   always_ff @(posedge clk_i or negedge rst_ni) begin
     if (!rst_ni) begin
@@ -509,6 +510,7 @@ module display_controller #(
       dma_valid <= 1'b0;
       dma_src <= 'x;
       dma_dst <= 'x;
+      dma_enabled <= 1'b0;
     end else begin
       // Delay the signal by one cycle so that we see the commited values.
       end_of_frame_sync_q <= end_of_frame_sync;
@@ -525,11 +527,16 @@ module display_controller #(
           dma_valid <= 1'b1;
           dma_src <= cr_fb_base_latch;
           dma_dst <= 0;
-        end else if (end_of_line_sync_q) begin
+          dma_enabled <= 1'b1;
+        end else if (end_of_line_sync_q && dma_enabled) begin
           dma_valid <= 1'b1;
           // dma_src is incremented already.
           dma_dst <= {!dma_dst[14], 14'd0};
         end
+      end else begin
+        // Ensure that end_of_line_sync_q will not trigger further DMA
+        // until next end_of_frame_sync_q.
+        dma_enabled <= 1'b0;
       end
     end
   end
