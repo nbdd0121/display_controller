@@ -518,7 +518,6 @@ module display_controller #(
 
       if (dma_valid && dma_ready) begin
         dma_valid <= 1'b0;
-        dma_src <= dma_src + cr_fb_bpl_latch;
       end
 
       // We use BPL = 0 to indicate that framebuffer is disabled.
@@ -530,6 +529,7 @@ module display_controller #(
           dma_enabled <= 1'b1;
         end else if (end_of_line_sync_q && dma_enabled) begin
           dma_valid <= 1'b1;
+          dma_src <= dma_src + cr_fb_bpl_latch;
           // dma_src is incremented already.
           dma_dst <= {!dma_dst[14], 14'd0};
         end
