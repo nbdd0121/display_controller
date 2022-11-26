@@ -1,9 +1,9 @@
-`include "axi_util.svh"
+`include "tl_util.svh"
 
 module display_controller #(
   parameter DataWidth = 64,
   parameter AddrWidth = 64,
-  parameter IdWidth = 1
+  parameter SourceWidth = 1
 ) (
   // Bus clock and reset.
   input  logic clk_i,
@@ -30,7 +30,7 @@ module display_controller #(
   input  logic [31:0] ctrl_wrdata_i,
   output logic [31:0] ctrl_rddata_o,
 
-  `AXI_DECLARE_HOST_PORT(DataWidth, AddrWidth, IdWidth, dma)
+  `TL_DECLARE_HOST_PORT(DataWidth, AddrWidth, SourceWidth, 1, dma)
 );
 
   localparam DataWidthInBytes = DataWidth / 8;
@@ -457,22 +457,40 @@ module display_controller #(
   ////////////////
   // region DMA //
 
-  `AXI_DECLARE(DataWidth, AddrWidth, IdWidth, buffer);
+  `TL_DECLARE(DataWidth, AddrWidth, SourceWidth, 1, buffer);
+  `TL_DECLARE(DataWidth, AddrWidth, SourceWidth, 1, buffer_lite);
 
   // Internal write-only AXI channels that serves as the sink of data mover.
-  axi_bram_ctrl # (
+  tl_adapter_bram # (
     .DataWidth (DataWidth),
     .AddrWidth (AddrWidth),
-    .BRAM_ADDR_WIDTH (15 - NonBurstSize)
+    .SourceWidth (SourceWidth),
+    .BramAddrWidth (15 - NonBurstSize)
   ) buffer_ctrl (
     .clk_i,
     .rst_ni,
-    `AXI_CONNECT_DEVICE_PORT(host, buffer),
-    .bram_en (buffer_write_en),
-    .bram_we (buffer_write_strb),
-    .bram_addr (buffer_write_addr),
-    .bram_wrdata (buffer_write_data),
-    .bram_rddata ()
+    `TL_CONNECT_DEVICE_PORT(host, buffer_lite),
+    .bram_en_o (buffer_write_en),
+    .bram_we_o (),
+    .bram_addr_o (buffer_write_addr),
+    .bram_wmask_o (buffer_write_strb),
+    .bram_wdata_o (buffer_write_data),
+    .bram_rdata_i ()
+  );
+
+  tl_adapter #(
+    .DataWidth (DataWidth),
+    .AddrWidth (AddrWidth),
+    .SourceWidth (SourceWidth),
+    .SinkWidth (1),
+    .HostMaxSize (6),
+    .DeviceMaxSize (NonBurstSize),
+    .Fifo (1'b1)
+  ) buffer (
+    .clk_i,
+    .rst_ni,
+    `TL_CONNECT_DEVICE_PORT(host, buffer),
+    `TL_CONNECT_HOST_PORT(device, buffer_lite)
   );
 
   logic dma_ready;
@@ -481,15 +499,16 @@ module display_controller #(
   logic [AddrWidth-1:0] dma_dst;
   logic [AddrWidth-1:0] dma_len;
 
-  axi_data_mover # (
+  display_controller_data_mover # (
     .DataWidth (DataWidth),
     .AddrWidth (AddrWidth),
-    .MaxBurstLen (256)
+    .SourceWidth (SourceWidth),
+    .BlockSize (6)
   ) data_mover (
     .clk_i,
     .rst_ni,
-    `AXI_FORWARD_HOST_PORT(src, dma),
-    `AXI_CONNECT_HOST_PORT(dst, buffer),
+    `TL_FORWARD_HOST_PORT(src, dma),
+    `TL_CONNECT_HOST_PORT(dst, buffer),
     .ready_o (dma_ready),
     .valid_i (dma_valid),
     .src_i (dma_src),

@@ -11,12 +11,11 @@ filesets:
       - lowrisc:prim:flop_2sync
       - lowrisc:prim:pulse_sync
       - lowrisc:prim_generic:ram_simple_2p
-      - lowrisc:axi:common
-      - lowrisc:axi_lite:common
-      - garyguo.net:openip:axi_bram_ctrl
+      - lowrisc:tl:adapter_bram
+      - lowrisc:tl:adapter
     files:
       - rtl/display_controller.sv
-      - rtl/axi_data_mover.sv
+      - rtl/data_mover.sv
     file_type: systemVerilogSource
 
   files_lint_verilator:
