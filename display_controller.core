@@ -14,6 +14,7 @@ filesets:
       - lowrisc:tl:adapter_bram
       - lowrisc:tl:adapter
     files:
+      - clk_en_gen.sv
       - rtl/display_controller.sv
       - rtl/data_mover.sv
     file_type: systemVerilogSource
